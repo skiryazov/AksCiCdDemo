@@ -1,0 +1,35 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  name: github-aks-cicd
+  labels:
+    app: github-aks-cicd
+spec:
+  selector:
+    app: github-aks-cicd
+  ports:
+    - protocol: TCP
+      port: 80
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-aks-cicd
+spec:
+  selector:
+    matchLabels:
+      app: github-aks-cicd
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: github-aks-cicd
+    spec:
+      containers:
+      - name: github-aks-cicd
+        image: smartdev.azurecr.io/github-cicd-prep:#{VERSION}#
+        ports:
+        - containerPort: 80
+      imagePullSecrets:
+      - name: secret

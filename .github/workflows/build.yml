@@ -1,0 +1,100 @@
+# This is a CI/CD workflow that illustrates an automated containerized build and deployment to Kubernetes
+
+name: CI
+
+# Controls when the action will run. 
+on:
+  # Triggers the workflow on push or pull request events but only for the main branch
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Workflow variables
+env:
+  SECRET: image-pull-secret
+  REGISTRY_NAME: smartdev
+  REGISTRY_URI: smartdev.azurecr.io
+  ACR_PRINCIPAL: 9075e3ce-7d6d-434b-b21b-68ea1830455c
+  ACR_PRINCIPAL_TENANT: 86d52980-68e9-4166-840a-04ef0494ec2c
+  APP_NAME: github-cicd-prep
+  NAMESPACE: github-test
+  CLUSTER_NAME: github-demo-cluster
+  CLUSTER_RESOURCE_GROUP: Github-CiCd-Demo
+  VERSION: v1.0.0-beta${{ github.run_number }}
+  
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: Checkout the repo
+        uses: actions/checkout@v2
+
+      - name: Login to ACR
+        id: ecr
+        uses: elgohr/acr-login-action@master
+        with:
+          service_principal: ${{ env.ACR_PRINCIPAL }}
+          service_principal_password: ${{ secrets.ACR_PRINCIPAL_PASSWORD }}
+          tenant: ${{ env.ACR_PRINCIPAL_TENANT }}
+          registry: ${{ env.REGISTRY_NAME }}
+          repository: ${{ env.APP_NAME }}
+
+      - name: Publish to Registry
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: ${{ env.APP_NAME }}
+          username: ${{ steps.ecr.outputs.username }}
+          password: ${{ steps.ecr.outputs.password }}
+          registry: ${{ env.REGISTRY_URI }}
+          tags: "${{ env.VERSION }}"
+    
+      # Set the target Azure Kubernetes Service (AKS) cluster. 
+      - name: Select cluster
+        uses: azure/aks-set-context@v1
+        with:
+          creds: '${{ secrets.AZURE_CREDENTIALS }}'
+          cluster-name: ${{ env.CLUSTER_NAME }}
+          resource-group: ${{ env.CLUSTER_RESOURCE_GROUP }}
+
+#      - name: Create namespace
+#        run: kubectl create namespace ${{ env.NAMESPACE }} -o json
+
+      - name: Create image pull secret
+        uses: azure/k8s-create-secret@v1
+        with:
+          container-registry-url: ${{ env.REGISTRY_URI }}
+          container-registry-username: ${{ secrets.REGISTRY_USERNAME }}
+          container-registry-password: ${{ secrets.REGISTRY_PASSWORD }}
+          secret-name: ${{ env.SECRET }}
+          namespace: ${{ env.NAMESPACE }}
+          force: true
+ 
+      - name: Replace version number in k8s yaml file
+        uses: cschleiden/replace-tokens@v1
+        with:
+          files: '["**/*.yaml"]'
+        env:
+          VERSION: ${{ env.VERSION }}
+
+      - name: Kubernetes deployment
+        uses: azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s-deployment.yaml
+          images: |
+            ${{ env.REGISTRY_uri }}/${{ env.APP_NAME }}:${{ env.VERSION }}
+          imagepullsecrets: |
+            ${{ env.SECRET }}
+          namespace: ${{ env.NAMESPACE }}
