@@ -94,7 +94,7 @@ jobs:
           manifests: |
             k8s-deployment.yaml
           images: |
-            ${{ env.REGISTRY_uri }}/${{ env.APP_NAME }}:${{ env.VERSION }}
+            ${{ env.REGISTRY_URI }}/${{ env.APP_NAME }}:${{ env.VERSION }}
           imagepullsecrets: |
             ${{ env.SECRET }}
           namespace: ${{ env.NAMESPACE }}
